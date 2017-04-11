@@ -22,23 +22,7 @@ if not ok then
     new_tab = function () return {} end
 end
 
-local ok, clear_tab = pcall(require, "table.clear")
-if not ok then
-    clear_tab = function(tab) for k, _ in pairs(tab) do tab[k] = nil end end
-end
-
-local _M = new_tab(0, 2)
-
-_M._VERSION = '0.01'
-
-
 local function get_cookie_table(text_cookie)
-    if type(text_cookie) ~= "string" then
-        log(ERR, format("expect text_cookie to be \"string\" but found %s",
-                type(text_cookie)))
-        return {}
-    end
-
     local EXPECT_KEY    = 1
     local EXPECT_VALUE  = 2
     local EXPECT_SP     = 3
@@ -97,38 +81,6 @@ local function get_cookie_table(text_cookie)
     return cookie_table
 end
 
-function _M.new(self)
-    local _cookie = ngx.var.http_cookie
-    --if not _cookie then
-        --return nil, "no cookie found in current request"
-    --end
-    return setmetatable({ _cookie = _cookie, set_cookie_table = new_tab(4, 0) },
-        { __index = self })
-end
-
-function _M.get(self, key)
-    if not self._cookie then
-        return nil, "no cookie found in the current request"
-    end
-    if self.cookie_table == nil then
-        self.cookie_table = get_cookie_table(self._cookie)
-    end
-
-    return self.cookie_table[key]
-end
-
-function _M.get_all(self)
-    if not self._cookie then
-        return nil, "no cookie found in the current request"
-    end
-
-    if self.cookie_table == nil then
-        self.cookie_table = get_cookie_table(self._cookie)
-    end
-
-    return self.cookie_table
-end
-
 local function bake(cookie)
     if not cookie.key or not cookie.value then
         return nil, 'missing cookie field "key" or "value"'
@@ -160,7 +112,7 @@ local function bake(cookie)
     return str
 end
 
-function _M.set(self, cookie)
+local function set(cookie)
     local cookie_str, err = bake(cookie)
     if not cookie_str then
         return nil, err
@@ -168,12 +120,11 @@ function _M.set(self, cookie)
 
     local set_cookie = ngx_header['Set-Cookie']
     local set_cookie_type = type(set_cookie)
-    local t = self.set_cookie_table
-    clear_tab(t)
 
     if set_cookie_type == "string" then
         -- only one cookie has been setted
         if set_cookie ~= cookie_str then
+            local t = {}
             t[1] = set_cookie
             t[2] = cookie_str
             ngx_header['Set-Cookie'] = t
@@ -181,7 +132,7 @@ function _M.set(self, cookie)
     elseif set_cookie_type == "table" then
         -- more than one cookies has been setted
         local size = #set_cookie
-
+        local t = {}
         -- we can not set cookie like ngx.header['Set-Cookie'][3] = val
         -- so create a new table, copy all the values, and then set it back
         for i=1, size do
@@ -200,4 +151,8 @@ function _M.set(self, cookie)
     return true
 end
 
-return _M
+return {
+    get_cookie_table = get_cookie_table, 
+    bake = bake, 
+    set = set,
+}
